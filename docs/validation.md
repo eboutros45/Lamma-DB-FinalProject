@@ -73,3 +73,14 @@ reload/Back navigation, unsaved-selection protection and an in-viewport mobile
 checkout action. Network recovery tests abort an initial read and lose a response
 after a successful wallet write; Retry restores the view and creates only one
 wallet. Full-bill payment history is also asserted in the API suite.
+
+## New visual identity sweep
+
+The cobalt/ink/citrus redesign covers authentication, overview, wallets and wallet
+details, requests, bills and receipts, expenses, transactions, business, account
+tools and dialogs. An isolated demo database was used for 44 route renders across
+1440px desktop, 834px tablet, 390px mobile and 320px small mobile widths, plus
+authentication and incoming-request captures. The sweep reported no horizontal
+overflow or page errors; the locally hosted Manrope font loaded successfully.
+All five existing browser interaction tests passed after the final style adjustments.
+These checks use Chromium, not physical-device Safari.

@@ -59,3 +59,14 @@ invitation acceptance, bill checkout, unsaved edits, reload/Back/deep links,
 initial connection recovery and a lost write response with a duplicate-free retry.
 Screenshots are reviewed at desktop and mobile sizes; overflow is checked at
 390px and 320px. These checks use Chromium, not physical-device Safari.
+
+## New visual identity sweep
+
+The cobalt/ink/citrus redesign covers authentication, overview, wallets and wallet
+details, requests, bills and receipts, expenses, transactions, business, account
+tools and dialogs. An isolated demo database was used for 44 route renders across
+1440px desktop, 834px tablet, 390px mobile and 320px small mobile widths, plus
+authentication and incoming-request captures. The sweep reported no horizontal
+overflow or page errors; the locally hosted Manrope font loaded successfully.
+All five existing browser interaction tests passed after the final style adjustments.
+These checks use Chromium, not physical-device Safari.

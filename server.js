@@ -14,8 +14,8 @@ export async function createApp({dataDir=process.env.DATA_DIR||'data/lamma'}={})
    try{
     const url=new URL(req.url,'http://localhost');
     if(!url.pathname.startsWith('/api/')){
-     const files={'/':'index.html','/app.js':'app.js','/bill-ui.js':'bill-ui.js','/style.css':'style.css','/favicon.svg':'favicon.svg'};const file=files[url.pathname];if(!file){send(404,{error:'Not found.'});return;}
-     const data=await readFile(new URL(`./public/${file}`,import.meta.url));res.writeHead(200,{'Content-Type':{'.html':'text/html','.css':'text/css','.js':'text/javascript','.svg':'image/svg+xml'}[extname(file)]});res.end(data);return;
+     const files={'/':'index.html','/app.js':'app.js','/bill-ui.js':'bill-ui.js','/style.css':'style.css','/favicon.svg':'favicon.svg','/fonts/manrope-latin-wght-normal.woff2':'fonts/manrope-latin-wght-normal.woff2'};const file=files[url.pathname];if(!file){send(404,{error:'Not found.'});return;}
+     const data=await readFile(new URL(`./public/${file}`,import.meta.url));res.writeHead(200,{'Content-Type':{'.html':'text/html','.css':'text/css','.js':'text/javascript','.svg':'image/svg+xml','.woff2':'font/woff2'}[extname(file)]});res.end(data);return;
     }
     if(req.method==='POST'&&req.headers.origin&&new URL(req.headers.origin).host!==req.headers.host)throw new AppError('Cross-origin request rejected.',403);
     let body={};if(req.method==='POST'){let raw='';for await(const chunk of req){raw+=chunk;if(raw.length>32768)throw new AppError('Request is too large.',413);}try{body=JSON.parse(raw||'{}');}catch{throw new AppError('Invalid JSON.');}}

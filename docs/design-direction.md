@@ -1,23 +1,24 @@
 # Design direction
 
-The revised visual identity emphasizes a substantial mobile finance app:
-charcoal navigation and header, warm paper surfaces, and signal-orange balance
-cards and primary confirmation actions. It replaces the low-contrast pastel
-presentation with a more explicit hierarchy.
+Lamma uses a cobalt, ink-blue and citrus identity with locally hosted Manrope
+variable type. A custom arch mark carries through the favicon, wordmark and
+balance-card illustration. The font and its OFL license live in `public/fonts/`.
 
 ## Hierarchy
 
-1. Available balance: largest number, high-contrast orange surface.
-2. Money actions: solid icon controls and clear action verbs.
-3. Section headings and wallet totals: bold type with distinct scale.
-4. Names, statuses, and amounts: readable transaction rows and semantic badges.
-5. Supporting metadata: smaller, darker text; never the primary visual element.
+1. Personal balances occupy a solid cobalt surface with large white numerals.
+2. Primary actions use clear verbs, blue controls and selective citrus emphasis.
+3. Wallets, requests, invoices and receipts have distinct layouts for their jobs.
+4. Names and amounts lead each row; statuses use both text and semantic colors.
+5. Supporting metadata uses darker muted blue for contrast on pale surfaces.
 
-Mobile keeps fixed bottom navigation, 46–50px main controls, 16px form inputs,
-scrollable bottom sheets and safe-area padding. The home screen uses compact wallet rows; the complete wallets page holds
-group-wallet cards, with temporary restaurant wallets organized under Bills. The desktop sidebar follows the same charcoal/orange identity.
+Desktop has a white sidebar and spacious content grid. Tablet layouts collapse
+complex dashboard and wallet columns. Phones use a floating ink-blue navigation
+dock, four quick-action tiles, full-width cards and scrollable bottom-sheet forms.
+Checkout remains above navigation. Forms retain 16px inputs, safe-area spacing,
+visible focus and reduced-motion support.
 
-Core colors live in `public/style.css`: ink #181c1b, orange #ff7544, paper #eeefe9.
-Positive, pending and cancelled states retain separate readable colors and labels.
-Reduced-motion preferences remain supported. This pass changes presentation and
-copy; financial workflows and stored data stay compatible.
+Core colors in `public/style.css` are ink #17254b, cobalt #2048e6, citrus #e3f58b
+and canvas #f3f5fb. Authentication uses a cobalt illustrated hero. Gift wallets,
+business balances, customer bill tickets and paid receipts have distinct surfaces.
+The presentation update preserves existing workflows, routes and stored data.
