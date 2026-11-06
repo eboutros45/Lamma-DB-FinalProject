@@ -37,7 +37,8 @@ private and out of Git. To use a fresh test database, set a new DATA_DIR.
 - Send, pay, decline, or cancel payment requests; seven-day expiry.
 - Record/categorize expenses; split equally, by custom amounts, or percentages and generate reimbursement requests.
 - Create businesses with distinct wallets, manage team permissions, and issue itemized bills.
-- Review bills by code; pay in full or start a temporary split wallet.
+- Review bills by code; pay in full or choose your ordered items and pay into an automatic temporary split wallet.
+- Share dishes by quantity, reserve unpaid selections, and track each participant’s payment.
 - Collect contributions without overfunding; settle once to the business and archive.
 - Balanced, immutable ledger entries, persistent idempotency, and action audit records.
 
@@ -63,7 +64,7 @@ See [validation](docs/validation.md) and [implementation scope](docs/implementat
 
 ## Design and requirements
 
-The initial migration preserves the supplied CDM/LDM translation. Migrations 002 and 003
+The initial migration preserves the supplied CDM/LDM translation. Migrations 002–004
 add the financial and collaboration foundations. PGlite runs a PostgreSQL engine locally; moving
 the service to a hosted PostgreSQL server requires a database-driver adapter and
 multi-process concurrency validation. API requests are serialized in this local
@@ -71,6 +72,7 @@ single-process version, with SQL transactions for atomic actions.
 
 - [Development sequence](docs/development-plan.md)
 - [Design direction](docs/design-direction.md)
+- [Shared bill walkthrough and payment rules](docs/shared-bills.md)
 - [Schema decisions](docs/schema-decisions.md)
 - [Production guidelines](docs/production-guidelines/guidelines.md)
 - [Original guidelines DOCX](docs/production-guidelines/LAMMA%20-%20Production%20Guideline%20Set.docx)

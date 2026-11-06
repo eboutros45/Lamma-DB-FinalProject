@@ -36,3 +36,9 @@ The interface now includes mobile bottom navigation, adaptive form sheets, walle
 details and member activity. Invitations, expense splitting/reimbursement, shared
 owner payouts/archival, categories and business team access are available.
 Continue verifying these flows with test accounts before real provider integrations.
+
+## Item-based shared bills
+
+Participants can now select and reserve item quantities, review their exact share,
+and pay into an automatically created temporary wallet. One business settlement
+occurs once the whole bill is funded. See [walkthrough](shared-bills.md).

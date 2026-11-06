@@ -5,7 +5,7 @@
 Node HTTP API, a responsive browser UI, and persistent PGlite PostgreSQL.
 `store.js` owns financial primitives and initial flows; `workflows.js` adds
 collaboration workflows; `server.js` owns HTTP/session boundaries. Migrations
-001–003 run automatically at startup. Missing data directories are created.
+001–004 run automatically at startup. Missing data directories are created.
 Only USD with two decimal places is enabled; PostgreSQL stores exact numeric values.
 
 Tokens are random, hashed in storage, HttpOnly, and SameSite=Strict. Passwords use
@@ -50,8 +50,11 @@ PostgreSQL deployment still requires a driver adapter and concurrency validation
 - Default and private custom expense categories; private categories cannot be used
   by others. Shared expense viewers do not receive another user’s private category name.
 - Businesses, separate wallets, itemized bill creation, bill-code review, full bill
-  payments and temporary split wallets with capped custom contributions and one
-  consolidated settlement. Fully settled temporary wallets archive at zero balance.
+  payments and temporary split wallets. Item-based splits let participants join by
+  code, reserve their own item quantities, share fractional portions, review a saved
+  quote and pay once into the collection wallet. Prior custom-contribution wallets
+  remain supported. Fully funded wallets send one consolidated settlement and archive.
+  See [shared bill rules](shared-bills.md).
 - Business owners can grant/update/revoke manager, cashier and viewer access.
   Viewers cannot issue bills; managers/cashiers can. Only the primary owner manages
   team access; primary ownership cannot be changed through these endpoints.
@@ -70,14 +73,13 @@ are inline SVG. Desktop retains a full sidebar. Layouts are browser-tested at
 
 Phone verification, registration activation/recovery, contact sync/discoverability,
 SMS invitation delivery, richer shared-member permission management and removal,
-expense split editing/reissue after decline/expiry, item-based bill allocations,
-reservations, QR requests, refunds/reversals, POS imports/taxes/adjustments,
+expense split editing/reissue after decline/expiry, monetary reservations, QR requests, refunds/reversals, POS imports/taxes/adjustments,
 business approval/KYB, step-up authentication, full ledger account structure,
 provider reconciliation/event delivery, monitoring, backup/restore testing, hosted
 PostgreSQL/multi-worker support, and the applicable legal/operational model.
 
 A split expense represents reimbursement to its recorder; contributions to the
-shared wallet and item-based restaurant bill allocations are separate workflows.
+shared wallet and item-based restaurant bill payments are separate workflows.
 Business manager and cashier currently share bill-issuance permissions; richer
 role-specific operations remain to be defined.
 

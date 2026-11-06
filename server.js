@@ -14,7 +14,7 @@ export async function createApp({dataDir=process.env.DATA_DIR||'data/lamma'}={})
    try{
     const url=new URL(req.url,'http://localhost');
     if(!url.pathname.startsWith('/api/')){
-     const files={'/':'index.html','/app.js':'app.js','/style.css':'style.css','/favicon.svg':'favicon.svg'};const file=files[url.pathname];if(!file){send(404,{error:'Not found.'});return;}
+     const files={'/':'index.html','/app.js':'app.js','/bill-ui.js':'bill-ui.js','/style.css':'style.css','/favicon.svg':'favicon.svg'};const file=files[url.pathname];if(!file){send(404,{error:'Not found.'});return;}
      const data=await readFile(new URL(`./public/${file}`,import.meta.url));res.writeHead(200,{'Content-Type':{'.html':'text/html','.css':'text/css','.js':'text/javascript','.svg':'image/svg+xml'}[extname(file)]});res.end(data);return;
     }
     if(req.method==='POST'&&req.headers.origin&&new URL(req.headers.origin).host!==req.headers.host)throw new AppError('Cross-origin request rejected.',403);
@@ -33,9 +33,7 @@ export async function createApp({dataDir=process.env.DATA_DIR||'data/lamma'}={})
     const uid=session.user_id;
     if(req.method==='GET'&&url.pathname==='/api/wallet'){send(200,await store.detail(uid,url.searchParams.get('id')));return;}
     if(req.method==='GET'&&url.pathname==='/api/state'){send(200,await store.state(uid));return;}
-    if(req.method==='GET'&&url.pathname==='/api/bill'){
-     const bill=await one('SELECT b.*,biz.display_name FROM bill b JOIN business biz USING(business_id) WHERE bill_code=$1',[(url.searchParams.get('code')||'').toUpperCase()]);if(!bill)throw new AppError('Bill not found.',404);bill.items=await q('SELECT * FROM bill_item WHERE bill_id=$1',[bill.bill_id]);send(200,bill);return;
-    }
+    if(req.method==='GET'&&url.pathname==='/api/bill'){send(200,await store.billView(uid,url.searchParams.get('code')));return;}
     if(req.method==='POST'&&url.pathname==='/api/logout'){await q('DELETE FROM sessions WHERE token_hash=$1',[hash(token)]);res.setHeader('Set-Cookie','lamma_session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0');send(200,{ok:true});return;}
     if(req.method==='POST'&&url.pathname.startsWith('/api/actions/')){
      const key=req.headers['idempotency-key'];if(typeof key!=='string'||key.length<8||key.length>100)throw new AppError('A valid idempotency key is required.');

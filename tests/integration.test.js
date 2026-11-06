@@ -16,7 +16,7 @@ test('transfers are balanced and retries are idempotent; keys cannot change mean
 test('insufficient funds, precision, and self-transfer do not alter balances',async()=>{const before=(await request('state',{cookie:alex})).data.wallets[0].balance;for(const payload of [{phone:'+96170000002',amount:'999999'},{phone:'+96170000002',amount:'1.001'},{phone:'+96170000001',amount:'5'}])assert.equal((await action(alex,'transfer',payload)).status,400);assert.equal((await request('state',{cookie:alex})).data.wallets[0].balance,before);});
 test('nonmembers cannot contribute or administer shared wallets',async()=>{assert.equal((await action(alex,'shared',{name:'Invalid standalone bill wallet',purpose:'bill'})).status,400);const w=(await action(alex,'shared',{name:'Private trip',purpose:'general'})).data;assert.equal((await action(maya,'contribute',{wallet_id:w.wallet_id,amount:'5'})).status,403);assert.equal((await action(maya,'member',{wallet_id:w.wallet_id,phone:'+96170000003'})).status,403);});
 test('requests can be paid once and cannot be paid by the wrong user',async()=>{const r=(await action(alex,'request',{phone:'+96170000002',amount:'12',description:'Lunch'})).data;assert.equal((await action(alex,'request-pay',{request_id:r.request_id})).status,404);assert.equal((await action(maya,'request-pay',{request_id:r.request_id})).status,200);assert.equal((await action(maya,'request-pay',{request_id:r.request_id})).status,400);});
-test('split bill prevents overfunding and settles exactly once, then archives',async()=>{const biz=(await request('state',{cookie:alex})).data.businesses[0];const bill=(await action(alex,'bill',{business_id:biz.business_id,items:[{name:'Dinner',price:'50',quantity:1}]})).data;const split=await action(alex,'bill-split',{code:bill.bill_code});assert.equal(split.status,200);const wid=split.data.wallet_id;const invitation=(await action(alex,'member',{wallet_id:wid,phone:'+96170000002'})).data;assert.equal((await action(maya,'invitation-accept',{invitation_id:invitation.invitation_id})).status,200);assert.equal((await action(alex,'contribute',{wallet_id:wid,amount:'20'})).status,200);assert.equal((await action(maya,'contribute',{wallet_id:wid,amount:'31'})).status,400);assert.equal((await app.store.one('SELECT status FROM bill WHERE bill_id=$1',[bill.bill_id])).status,'payment_pending');const payments=await Promise.all([action(maya,'contribute',{wallet_id:wid,amount:'30'}),action(maya,'contribute',{wallet_id:wid,amount:'30'})]);assert.deepEqual(payments.map(r=>r.status).sort(),[200,400]);const w=await app.store.one('SELECT * FROM wallet WHERE wallet_id=$1',[wid]);assert.equal(w.status,'archived');assert.equal(Number(w.balance),0);const done=await app.store.one('SELECT * FROM bill WHERE bill_id=$1',[bill.bill_id]);assert.equal(done.status,'paid');const tx=await app.store.one('SELECT count(*) n FROM wallet_transaction WHERE sender_wallet_id=$1',[wid]);assert.equal(Number(tx.n),1);});
+test('split bill prevents overfunding and settles exactly once, then archives',async()=>{const biz=(await request('state',{cookie:alex})).data.businesses[0];const bill=(await action(alex,'bill',{business_id:biz.business_id,items:[{name:'Dinner',price:'50',quantity:1}]})).data;const split=await action(alex,'bill-split',{code:bill.bill_code,method:'custom'});assert.equal(split.status,200);const wid=split.data.wallet_id;const invitation=(await action(alex,'member',{wallet_id:wid,phone:'+96170000002'})).data;assert.equal((await action(maya,'invitation-accept',{invitation_id:invitation.invitation_id})).status,200);assert.equal((await action(alex,'contribute',{wallet_id:wid,amount:'20'})).status,200);assert.equal((await action(maya,'contribute',{wallet_id:wid,amount:'31'})).status,400);assert.equal((await app.store.one('SELECT status FROM bill WHERE bill_id=$1',[bill.bill_id])).status,'payment_pending');const payments=await Promise.all([action(maya,'contribute',{wallet_id:wid,amount:'30'}),action(maya,'contribute',{wallet_id:wid,amount:'30'})]);assert.deepEqual(payments.map(r=>r.status).sort(),[200,400]);const w=await app.store.one('SELECT * FROM wallet WHERE wallet_id=$1',[wid]);assert.equal(w.status,'archived');assert.equal(Number(w.balance),0);const done=await app.store.one('SELECT * FROM bill WHERE bill_id=$1',[bill.bill_id]);assert.equal(done.status,'paid');const tx=await app.store.one('SELECT count(*) n FROM wallet_transaction WHERE sender_wallet_id=$1',[wid]);assert.equal(Number(tx.n),1);});
 test('full bill payment needs no shared wallet and rejects second settlement',async()=>{const biz=(await request('state',{cookie:alex})).data.businesses[0];const b=(await action(alex,'bill',{business_id:biz.business_id,items:[{name:'Coffee',price:'3.50',quantity:2}]})).data;assert.equal((await action(maya,'bill-pay',{code:b.bill_code})).status,200);assert.equal((await action(alex,'bill-pay',{code:b.bill_code})).status,400);const done=await app.store.one('SELECT * FROM bill WHERE bill_id=$1',[b.bill_id]);assert.equal(done.shared_wallet_id,null);assert.equal(done.status,'paid');});
 test('gift delivery transfers balance and archives only on success',async()=>{const w=(await action(alex,'shared',{name:'Birthday',purpose:'gift',gift_phone:'+96170000002'})).data;assert.equal((await action(alex,'gift',{wallet_id:w.wallet_id})).status,400);await action(alex,'contribute',{wallet_id:w.wallet_id,amount:'8'});assert.equal((await action(alex,'gift',{wallet_id:w.wallet_id})).status,200);const done=await app.store.one('SELECT * FROM wallet WHERE wallet_id=$1',[w.wallet_id]);assert.equal(done.status,'archived');assert.equal(Number(done.balance),0);});
 test('personal expenses record obligations without moving funds',async()=>{const before=(await request('state',{cookie:alex})).data.wallets[0].balance;const r=await action(alex,'expense',{title:'Rent',amount:'200',expense_date:'2026-11-06'});assert.equal(r.status,200);assert.equal(r.data.shared_wallet_id,null);assert.equal((await request('state',{cookie:alex})).data.wallets[0].balance,before);});
@@ -130,4 +130,107 @@ test('business team roles enforce issuance and revocation immediately',async()=>
 test('collaboration operations preserve ledger reconciliation',async()=>{
  const errors=await app.store.q('SELECT w.wallet_id FROM wallet w LEFT JOIN ledger_entry l USING(wallet_id) GROUP BY w.wallet_id HAVING w.balance <> coalesce(sum(l.amount),0)');assert.deepEqual(errors,[]);
  const unbalanced=await app.store.q('SELECT transaction_id FROM ledger_entry GROUP BY transaction_id HAVING count(*)<2 OR sum(amount)<>0');assert.deepEqual(unbalanced,[]);
+});
+
+async function createItemBill(items=[{name:'Burger',price:'12',quantity:1},{name:'Lemonade',price:'5',quantity:2}]){
+ const biz=(await request('state',{cookie:alex})).data.businesses[0];
+ const created=await action(alex,'bill',{business_id:biz.business_id,items});assert.equal(created.status,200);
+ const code=created.data.bill_code;
+ const split=await action(alex,'bill-split',{code});assert.equal(split.status,200);
+ return {code,wallet:split.data,bill:created.data};
+}
+const viewBill=async(cookie,code)=>(await request('bill?code='+code,{cookie})).data;
+const claim=async(cookie,view,items)=>action(cookie,'bill-claim',{code:view.bill_code,revision:view.split_revision,items});
+
+test('item split creates one wallet, requires joining, and blocks arbitrary deposits',async()=>{
+ const {code,wallet}=await createItemBill();
+ const b=await viewBill(alex,code);assert.equal(b.split_method,'items');assert.equal(Number(b.shared_wallet_id),Number(wallet.wallet_id));
+ const outsider=await viewBill(maya,code);assert.equal(outsider.member_role,null);assert.deepEqual(outsider.people,[]);
+ assert.equal((await claim(maya,outsider,[{item_id:b.items[0].item_id,quantity:'1'}])).status,403);
+ assert.equal((await action(alex,'bill-split',{code})).status,400);
+ assert.equal((await action(alex,'contribute',{wallet_id:wallet.wallet_id,amount:'1'})).status,400);
+ assert.equal((await action(alex,'request',{wallet_id:wallet.wallet_id,phone:'+96170000002',amount:'1',description:'Bypass'})).status,400);
+ assert.equal((await action(maya,'bill-join',{code})).status,200);
+ assert.equal((await viewBill(maya,code)).member_role,'participant');
+});
+test('participants select their own items, pay once into the pool, and settle only at full funding',async()=>{
+ const {code,wallet,bill}=await createItemBill();await action(maya,'bill-join',{code});
+ let a=await viewBill(alex,code);assert.equal((await claim(alex,a,[{item_id:a.items[0].item_id,quantity:'1'},{item_id:a.items[1].item_id,quantity:'1'}])).status,200);
+ let m=await viewBill(maya,code);assert.equal((await claim(maya,m,[{item_id:m.items[1].item_id,quantity:'1'}])).status,200);
+ a=await viewBill(alex,code);assert.equal(Number(a.my_total),17);
+ const key=randomUUID(), payload={code,quote:a.quote};const first=await action(alex,'bill-pay-share',payload,key);assert.equal(first.status,200);
+ assert.equal((await action(alex,'bill-pay-share',payload,key)).data.transaction_id,first.data.transaction_id);
+ assert.equal((await action(alex,'bill-pay-share',payload)).status,400);
+ const pool=await app.store.one('SELECT balance,status FROM wallet WHERE wallet_id=$1',[wallet.wallet_id]);assert.equal(Number(pool.balance),17);assert.equal(pool.status,'active');
+ assert.equal((await app.store.one('SELECT status FROM bill WHERE bill_id=$1',[bill.bill_id])).status,'payment_pending');
+ a=await viewBill(alex,code);assert.equal((await claim(alex,a,[])).status,400);
+ m=await viewBill(maya,code);assert.equal(Number(m.my_total),5);assert.equal((await action(maya,'bill-pay-share',{code,quote:m.quote})).status,200);
+ const done=await viewBill(alex,code);assert.equal(done.status,'paid');assert.equal(done.wallet_status,'archived');assert.equal(Number(done.collected_amount),22);assert.equal(done.people.filter(p=>p.paid).length,2);
+ assert.equal(Number((await app.store.one('SELECT balance FROM wallet WHERE wallet_id=$1',[wallet.wallet_id])).balance),0);
+ assert.equal(Number((await app.store.one("SELECT count(*) n FROM wallet_transaction WHERE sender_wallet_id=$1 AND transaction_type='bill_settlement'",[wallet.wallet_id])).n),1);
+});
+test('overlapping claims, cross-bill item IDs, stale revisions and quotes cannot change saved or paid amounts',async()=>{
+ const {code}=await createItemBill();await action(maya,'bill-join',{code});
+ const original=await viewBill(alex,code), item=original.items[0];
+ assert.equal((await claim(alex,original,[{item_id:item.item_id,quantity:'1'}])).status,200);
+ assert.equal((await claim(maya,original,[{item_id:item.item_id,quantity:'1'}])).status,409);
+ let m=await viewBill(maya,code);assert.equal((await claim(maya,m,[{item_id:item.item_id,quantity:'1'}])).status,409);
+ const a=await viewBill(alex,code);assert.equal(Number(a.my_total),12);
+ const other=await createItemBill([{name:'Other bill item',price:'1',quantity:1}]);const otherView=await viewBill(alex,other.code);
+ assert.equal((await claim(alex,a,[{item_id:otherView.items[0].item_id,quantity:'1'}])).status,400);
+ assert.equal(Number((await viewBill(alex,code)).my_total),12);
+ assert.equal((await claim(alex,a,[{item_id:item.item_id,quantity:'0.5'}])).status,200);
+ assert.equal((await action(alex,'bill-pay-share',{code,quote:a.quote})).status,409);
+ assert.equal((await claim(alex,await viewBill(alex,code),[])).status,200);
+ assert.equal((await viewBill(alex,code)).selections.length,0);
+ m=await viewBill(maya,code);assert.equal((await claim(maya,m,[{item_id:item.item_id,quantity:'1'}])).status,200);
+});
+test('shared dishes split with exact remaining cents; failed funding keeps the saved items',async()=>{
+ const {code}=await createItemBill([{name:'Shared dessert',price:'5.01',quantity:1}]);
+ await action(maya,'bill-join',{code});let a=await viewBill(alex,code);
+ assert.equal((await claim(alex,a,[{item_id:a.items[0].item_id,quantity:'0.5'}])).status,200);
+ let m=await viewBill(maya,code);assert.equal((await claim(maya,m,[{item_id:m.items[0].item_id,quantity:'0.5'}])).status,200);
+ a=await viewBill(alex,code);m=await viewBill(maya,code);assert.equal(Number(a.my_total),2.51);assert.equal(Number(m.my_total),2.50);
+ const user=await request('register',{body:{phone:'+96170000006',first_name:'Empty',last_name:'Wallet',password:'testing-123'}});
+ const expensive=await createItemBill([{name:'No funds',price:'5',quantity:1}]);await action(user.cookie,'bill-join',{code:expensive.code});let empty=await viewBill(user.cookie,expensive.code);
+ await claim(user.cookie,empty,[{item_id:empty.items[0].item_id,quantity:'1'}]);empty=await viewBill(user.cookie,expensive.code);
+ assert.equal((await action(user.cookie,'bill-pay-share',{code:expensive.code,quote:empty.quote})).status,400);
+ const after=await viewBill(user.cookie,expensive.code);assert.equal(after.selections.length,1);assert.equal(after.my_payment,null);assert.equal(Number(after.collected_amount),0);
+});
+test('concurrent last-item claims and repeated checkout produce one allocation and one settlement',async()=>{
+ const {code,wallet}=await createItemBill([{name:'Last coffee',price:'3',quantity:1}]);await action(maya,'bill-join',{code});
+ const v=await viewBill(alex,code), items=[{item_id:v.items[0].item_id,quantity:'1'}];
+ const race=await Promise.all([claim(alex,v,items),claim(maya,v,items)]);assert.deepEqual(race.map(r=>r.status).sort(),[200,409]);
+ const payer=race[0].status===200?alex:maya, b=await viewBill(payer,code);
+ const checkouts=await Promise.all([action(payer,'bill-pay-share',{code,quote:b.quote}),action(payer,'bill-pay-share',{code,quote:b.quote})]);assert.deepEqual(checkouts.map(r=>r.status).sort(),[200,400]);
+ assert.equal(Number((await app.store.one('SELECT count(*) n FROM wallet_transaction WHERE sender_wallet_id=$1',[wallet.wallet_id])).n),1);
+ const errors=await app.store.q('SELECT w.wallet_id FROM wallet w LEFT JOIN ledger_entry l USING(wallet_id) GROUP BY w.wallet_id HAVING w.balance <> coalesce(sum(l.amount),0)');assert.deepEqual(errors,[]);
+});
+
+test('invalid item quantities and duplicate items are rejected without reserving funds or items',async()=>{
+ const {code}=await createItemBill([{name:'Tiny shared item',price:'0.01',quantity:1}]);
+ const v=await viewBill(alex,code), id=v.items[0].item_id;
+ for(const quantity of ['0','-1','NaN','0.00001','2']){
+  const result=await claim(alex,v,[{item_id:id,quantity}]);assert.ok([400,409].includes(result.status));
+ }
+ assert.equal((await claim(alex,v,[{item_id:id,quantity:'1'},{item_id:id,quantity:'1'}])).status,400);
+ assert.equal((await claim(alex,v,[{item_id:id,quantity:'0.5'}])).status,400);
+ const after=await viewBill(alex,code);assert.equal(after.selections.length,0);assert.equal(after.split_revision,v.split_revision);assert.equal(Number(after.collected_amount),0);
+ assert.equal((await action(alex,'bill-pay-share',{code,quote:'invalid'})).status,400);
+});
+test('failed final business settlement rolls back the last contribution and can be retried safely',async()=>{
+ const {code,bill,wallet}=await createItemBill([{name:'First dish',price:'5',quantity:1},{name:'Second dish',price:'6',quantity:1}]);await action(maya,'bill-join',{code});
+ let a=await viewBill(alex,code);await claim(alex,a,[{item_id:a.items[0].item_id,quantity:'1'}]);let m=await viewBill(maya,code);await claim(maya,m,[{item_id:m.items[1].item_id,quantity:'1'}]);
+ a=await viewBill(alex,code);await action(alex,'bill-pay-share',{code,quote:a.quote});m=await viewBill(maya,code);
+ const business=await app.store.one('SELECT * FROM business WHERE business_id=$1',[bill.business_id]);const payerBefore=(await request('state',{cookie:maya})).data.wallets.find(w=>w.wallet_type==='personal').balance;
+ const key=randomUUID(),payload={code,quote:m.quote};
+ try{
+  await app.store.q("UPDATE wallet SET status='restricted' WHERE wallet_id=$1",[business.wallet_id]);
+  assert.equal((await action(maya,'bill-pay-share',payload,key)).status,400);
+  const after=await viewBill(maya,code);assert.equal(after.my_payment,null);assert.equal(Number(after.collected_amount),5);assert.equal(after.status,'payment_pending');
+  assert.equal((await request('state',{cookie:maya})).data.wallets.find(w=>w.wallet_type==='personal').balance,payerBefore);
+  assert.equal(Number((await app.store.one('SELECT balance FROM wallet WHERE wallet_id=$1',[wallet.wallet_id])).balance),5);
+ }finally{await app.store.q("UPDATE wallet SET status='active' WHERE wallet_id=$1",[business.wallet_id]);}
+ assert.equal((await action(maya,'bill-pay-share',payload,key)).status,200);assert.equal((await viewBill(maya,code)).status,'paid');
+ const unbalanced=await app.store.q('SELECT w.wallet_id FROM wallet w LEFT JOIN ledger_entry l USING(wallet_id) GROUP BY w.wallet_id HAVING w.balance <> coalesce(sum(l.amount),0)');assert.deepEqual(unbalanced,[]);
 });

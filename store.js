@@ -1,3 +1,4 @@
+import { billSplitting } from './bill-splitting.js';
 import { collaboration } from './workflows.js';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { PGlite } from '@electric-sql/pglite';
@@ -17,7 +18,7 @@ export async function openStore(path){
  const transaction=fn=>db.transaction(tx=>context.run(tx,fn));
  const one=async(sql,args=[]) => (await q(sql,args))[0];
  await db.exec('CREATE TABLE IF NOT EXISTS schema_migration (name text PRIMARY KEY)');
- for(const name of ['001_initial_schema.sql','002_functional_foundation.sql','003_collaboration.sql']){
+ for(const name of ['001_initial_schema.sql','002_functional_foundation.sql','003_collaboration.sql','004_bill_item_payments.sql']){
   if(!await one('SELECT name FROM schema_migration WHERE name=$1',[name])){
    await db.exec(await readFile(new URL(`./db/migrations/${name}`,import.meta.url),'utf8'));
    await q('INSERT INTO schema_migration VALUES ($1)',[name]);
@@ -55,7 +56,9 @@ export async function openStore(path){
   await q("UPDATE wallet SET status='archived' WHERE wallet_id=$1",[w.wallet_id]);
  }
  const workflows=collaboration({q,one,member,personal,transfer});
+ const splitBills=billSplitting({q,one,member,personal,shared,transfer,settleBill});
  async function action(uid,kind,b){
+  const splitResult=await splitBills.action(uid,kind,b);if(splitResult!==undefined)return splitResult;
   const extra=await workflows.action(uid,kind,b);if(extra!==undefined)return extra;
   const p=await personal(uid);
   if(kind==='transfer'){
@@ -64,6 +67,7 @@ export async function openStore(path){
   if(kind==='shared'){if(b.purpose&&!['general','gift'].includes(b.purpose))throw new AppError('Temporary bill wallets are created through a bill.');const recipient=b.purpose==='gift'?await one('SELECT user_id FROM users WHERE phone=$1',[b.gift_phone]):null;return shared(uid,b.name,b.purpose||'general',b.target_amount,recipient?.user_id);}
   if(kind==='contribute'){
    const w=await member(uid,b.wallet_id);const amount=money(b.amount);const bill=await one("SELECT * FROM bill WHERE shared_wallet_id=$1 AND status <> 'paid'",[w.wallet_id]);
+   if(bill?.split_method==='items')throw new AppError('Select and pay your items from the bill instead.');
    if(bill&&Number(w.balance)+Number(amount)>Number(bill.total_amount))throw new AppError('This contribution exceeds the outstanding bill amount.');
    const t=await transfer(p.wallet_id,w.wallet_id,amount,'contribution');if(bill)await settleBill(bill);return t;
   }
@@ -73,7 +77,7 @@ export async function openStore(path){
   }
   if(kind==='request'){
    const payer=await one('SELECT user_id FROM users WHERE phone=$1',[b.phone]);if(!payer)throw new AppError('The recipient must register first.');if(String(payer.user_id)===String(uid))throw new AppError('Choose another person.');
-   const dest=b.wallet_id||p.wallet_id;const w=await member(uid,dest);if(w.status!=='active')throw new AppError('Choose an active destination wallet.');
+   const dest=b.wallet_id||p.wallet_id;const w=await member(uid,dest);if(await one("SELECT bill_id FROM bill WHERE shared_wallet_id=$1 AND split_method='items'",[dest]))throw new AppError('Use item selection to pay into this bill wallet.');if(w.status!=='active')throw new AppError('Choose an active destination wallet.');
    return one("INSERT INTO payment_request(requester_id,payer_id,destination_wallet_id,amount,description,status,expires_at) VALUES($1,$2,$3,$4,$5,'pending',now()+interval '7 days') RETURNING *",[uid,payer.user_id,dest,money(b.amount),text(b.description,'description')]);
   }
   if(kind==='request-pay'||kind==='request-decline'){
@@ -81,6 +85,7 @@ export async function openStore(path){
    if(kind==='request-decline'){await q("UPDATE payment_request SET status='declined',responded_at=now() WHERE request_id=$1",[r.request_id]);return {message:'Request declined.'};}
    // Contributions to temporary bill wallets must also obey the funding cap and settlement workflow.
    const bill=await one('SELECT * FROM bill WHERE shared_wallet_id=$1',[r.destination_wallet_id]);
+   if(bill?.split_method==='items')throw new AppError('Select and pay your items from the bill instead.');
    if(bill){await member(uid,r.destination_wallet_id);const w=await one('SELECT balance FROM wallet WHERE wallet_id=$1',[r.destination_wallet_id]);if(Number(w.balance)+Number(r.amount)>Number(bill.total_amount))throw new AppError('Payment exceeds the outstanding bill amount.');}
    const t=await transfer(p.wallet_id,r.destination_wallet_id,r.amount,'request_payment');await q("UPDATE payment_request SET status='paid',responded_at=now(),transaction_id=$1 WHERE request_id=$2",[t.transaction_id,r.request_id]);if(bill)await settleBill(bill);if(r.expense_id)await workflows.refreshExpense(r.expense_id);return t;
   }
@@ -96,13 +101,8 @@ export async function openStore(path){
    const bill=await one("INSERT INTO bill(business_id,bill_code,total_amount,status) VALUES($1,$2,$3,'open') RETURNING *",[biz.business_id,`B-${randomBytes(4).toString('hex').toUpperCase()}`,total]);
    for(const i of items)await q('INSERT INTO bill_item(bill_id,name,quantity,unit_price) VALUES($1,$2,$3,$4)',[bill.bill_id,i.name,i.quantity,i.price]);return bill;
   }
-  if(kind==='bill-pay'||kind==='bill-split'){
-   // Bill codes are shareable payment references; no global bill enumeration is exposed.
+  if(kind==='bill-pay'){
    const bill=await one('SELECT * FROM bill WHERE bill_code=$1 FOR UPDATE',[text(b.code,'bill code').toUpperCase()]);if(!bill)throw new AppError('Bill not found.',404);if(bill.status==='paid')throw new AppError('This bill has already been paid.');
-   if(kind==='bill-split'){
-    if(bill.shared_wallet_id)throw new AppError('This bill already has a collection wallet. Ask its owner to add you.');
-    const w=await shared(uid,`Split · ${bill.bill_code}`,'bill',Number(bill.total_amount).toFixed(2));await q("UPDATE bill SET shared_wallet_id=$1,status='payment_pending' WHERE bill_id=$2",[w.wallet_id,bill.bill_id]);return w;
-   }
    if(bill.shared_wallet_id)throw new AppError('This bill is being collected in a shared wallet.');const biz=await one('SELECT wallet_id FROM business WHERE business_id=$1',[bill.business_id]);const t=await transfer(p.wallet_id,biz.wallet_id,bill.total_amount,'bill_payment');await q("UPDATE bill SET status='paid',paid_at=now(),transaction_id=$1 WHERE bill_id=$2",[t.transaction_id,bill.bill_id]);return t;
   }
   throw new AppError('Unknown action.',404);
@@ -131,5 +131,5 @@ export async function openStore(path){
    const biz=await action(a.user_id,'business',{name:'Cedar & Salt'});await action(a.user_id,'bill',{business_id:biz.business_id,items:[{name:'Mezze to share',price:'24',quantity:1},{name:'Fresh lemonade',price:'6',quantity:2}]});
   });
  }
- return {db,transaction,q,one,personal,member,action,state,createUser,transfer,detail:workflows.detail};
+ return {db,transaction,q,one,personal,member,action,state,createUser,transfer,detail:workflows.detail,billView:splitBills.view};
 }

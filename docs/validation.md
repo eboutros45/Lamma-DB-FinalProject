@@ -2,10 +2,10 @@
 
 ## Current functional version
 
-The original migration and migrations 002–003 execute against the embedded PostgreSQL
+The original migration and migrations 002–004 execute against the embedded PostgreSQL
 engine in PGlite. The application seeds and persists a local demo database.
 
-`npm test` verifies 20 scenarios against an isolated PostgreSQL database:
+`npm test` verifies 27 scenarios against an isolated PostgreSQL database:
 
 1. Authentication and atomic personal-wallet provisioning.
 2. Balanced transfers, idempotent retries, and payload/key conflicts.
@@ -48,3 +48,18 @@ in this local application are serialized before domain transactions execute.
 Before PostgreSQL dependencies were installed, migration 001 was checked in an
 in-memory SQLite compatibility run with identity declarations adapted. That check
 has now been superseded by execution and integration tests against PGlite.
+
+## Item-based bill validation
+
+Seven additional API tests cover automatic wallet creation, explicit joining,
+blocking untracked funding, each participant’s own items, one contribution per
+person, cent-exact shared portions, stale saves and payment quotes, cross-bill IDs,
+releasing unpaid claims, insufficient funds, malformed quantities, competing
+last-item claims, duplicate checkout, and rollback/retry when final settlement fails.
+Wallet/ledger reconciliation is checked after the financial operations.
+
+A third browser test uses separate mobile sessions for Alex and Maya. They split
+three items, including a $5.01 dessert into halves ($2.51 and $2.50), and pay $19.51
+and $7.50. It verifies that the business receives nothing after the first payment,
+then receives exactly $27.01 after the second; the bill becomes paid and the pool
+is archived at zero. The new screen is checked at 390px and 320px widths.
