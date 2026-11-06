@@ -63,3 +63,13 @@ three items, including a $5.01 dessert into halves ($2.51 and $2.50), and pay $1
 and $7.50. It verifies that the business receives nothing after the first payment,
 then receives exactly $27.01 after the second; the bill becomes paid and the pool
 is archived at zero. The new screen is checked at 390px and 320px widths.
+
+## UI review validation
+
+Five browser tests now cover the task-focused pages and checkout states. Added
+coverage verifies merchant previews without payment controls, separation of
+restaurant collections from group wallets, hash deep links through sign-in,
+reload/Back navigation, unsaved-selection protection and an in-viewport mobile
+checkout action. Network recovery tests abort an initial read and lose a response
+after a successful wallet write; Retry restores the view and creates only one
+wallet. Full-bill payment history is also asserted in the API suite.

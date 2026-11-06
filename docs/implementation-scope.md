@@ -86,3 +86,12 @@ role-specific operations remain to be defined.
 Public demo credentials and seeded balances are for local testing. Newly registered
 accounts start at zero. This version uses test funds and does not connect real
 funding or payout providers.
+
+## Page and navigation cleanup
+
+Home shows compact summaries, Wallets manages general/gift funds, Bills holds the
+customer's joined/paid bills, and Business holds merchant invoices and issuance.
+Requests separate actionable payments, sent requests, invitations and history.
+Expenses and transactions have their own status/scope filters. Hash routes support
+reload and Back, and shared bills use one state-aware mobile checkout action.
+See [UI review](ui-review.md) for reliability and interaction details.

@@ -72,6 +72,7 @@ single-process version, with SQL transactions for atomic actions.
 
 - [Development sequence](docs/development-plan.md)
 - [Design direction](docs/design-direction.md)
+- [UI and workflow review](docs/ui-review.md)
 - [Shared bill walkthrough and payment rules](docs/shared-bills.md)
 - [Schema decisions](docs/schema-decisions.md)
 - [Production guidelines](docs/production-guidelines/guidelines.md)

@@ -6,7 +6,7 @@
 2. Open Bills & splits, review that bill, and choose **Choose what I ordered · Item split**.
 3. Confirm. Lamma creates one temporary wallet tied to the bill and makes the initiator its owner.
 4. Check the items you ordered and enter quantities. A shared dish can be split with a fractional quantity, such as 0.5.
-5. Save your items. Review the exact saved share, then select **Pay my share** and confirm.
+5. Use **Save my items** in the checkout bar. The same control then becomes **Pay my share**; review and confirm the exact saved amount.
 6. Share the bill code with Maya. In a separate browser profile/private window, sign in as Maya, find that bill and choose **Join shared bill**. She selects and pays her own items.
 7. Contributions accumulate in the temporary wallet. Once the full bill is funded, one transaction pays the business and the empty temporary wallet is archived.
 
@@ -30,3 +30,8 @@ Invitations remain available through the table’s Invite action. Existing custo
 Migration 004 adds bill split mode/revision, selection quantities, and `bill_share_payment` linking the participant and bill to the contribution transaction. It preserves the original item-selection junction and all prior account/bill data. `bill-splitting.js` contains backend rules; `public/bill-ui.js` renders the shared-bill screen.
 
 The application remains a USD test-funds prototype. Refunds, cancellation with collected funds, claim expiration/reassignment, and multiple checkouts per participant remain future work. Existing tax/discount import functionality is unchanged; bill issuance currently totals explicitly supplied items.
+
+Share bill now creates a link that opens the bill after sign-in. Paid participants
+see a receipt and table progress, while the full bill is a disclosure. Issuers
+preview and share invoices from Business; customer bill lists show only joined
+collections and bills personally paid.
