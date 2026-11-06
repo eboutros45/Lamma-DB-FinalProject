@@ -70,6 +70,7 @@ multi-process concurrency validation. API requests are serialized in this local
 single-process version, with SQL transactions for atomic actions.
 
 - [Development sequence](docs/development-plan.md)
+- [Design direction](docs/design-direction.md)
 - [Schema decisions](docs/schema-decisions.md)
 - [Production guidelines](docs/production-guidelines/guidelines.md)
 - [Original guidelines DOCX](docs/production-guidelines/LAMMA%20-%20Production%20Guideline%20Set.docx)
