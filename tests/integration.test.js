@@ -2,6 +2,10 @@ import {test,before,after} from 'node:test';
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
 import {createApp} from '../server.js';
+import {mkdtemp,rm,access} from 'node:fs/promises';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
+import {openStore} from '../store.js';
 let app,base,alex,maya;
 async function request(path,{cookie,body,key}={}){const r=await fetch(base+'/api/'+path,{method:body?'POST':'GET',headers:{...(cookie?{cookie}:{}),...(body?{'Content-Type':'application/json'}:{}),...(key?{'Idempotency-Key':key}:{})},body:body?JSON.stringify(body):undefined});return {status:r.status,data:await r.json(),cookie:r.headers.get('set-cookie')?.split(';')[0]};}
 const action=(cookie,kind,body,key=randomUUID())=>request('actions/'+kind,{cookie,body,key});
@@ -17,3 +21,22 @@ test('full bill payment needs no shared wallet and rejects second settlement',as
 test('gift delivery transfers balance and archives only on success',async()=>{const w=(await action(alex,'shared',{name:'Birthday',purpose:'gift',gift_phone:'+96170000002'})).data;assert.equal((await action(alex,'gift',{wallet_id:w.wallet_id})).status,400);await action(alex,'contribute',{wallet_id:w.wallet_id,amount:'8'});assert.equal((await action(alex,'gift',{wallet_id:w.wallet_id})).status,200);const done=await app.store.one('SELECT * FROM wallet WHERE wallet_id=$1',[w.wallet_id]);assert.equal(done.status,'archived');assert.equal(Number(done.balance),0);});
 test('personal expenses record obligations without moving funds',async()=>{const before=(await request('state',{cookie:alex})).data.wallets[0].balance;const r=await action(alex,'expense',{title:'Rent',amount:'200',expense_date:'2026-11-06'});assert.equal(r.status,200);assert.equal(r.data.shared_wallet_id,null);assert.equal((await request('state',{cookie:alex})).data.wallets[0].balance,before);});
 test('ledger is immutable, rejects unbalanced journals, and reconciles every wallet',async()=>{await assert.rejects(app.store.q('UPDATE ledger_entry SET amount=1'));await assert.rejects(app.store.transaction(async()=>{const t=await app.store.one("INSERT INTO wallet_transaction(receiver_wallet_id,reference_code,amount,transaction_type,status) VALUES(1,'BAD',1,'demo_funding','completed') RETURNING transaction_id");await app.store.q('INSERT INTO ledger_entry(transaction_id,wallet_id,amount) VALUES($1,1,1)',[t.transaction_id]);}));const errors=await app.store.q('SELECT w.wallet_id FROM wallet w LEFT JOIN ledger_entry l USING(wallet_id) GROUP BY w.wallet_id HAVING w.balance <> coalesce(sum(l.amount),0)');assert.deepEqual(errors,[]);});
+
+test('fresh install creates missing database parents and preserves data on restart',async()=>{
+ const root=await mkdtemp(join(tmpdir(),'lamma-startup-'));
+ const path=join(root,'missing-parent','data','lamma');
+ let store;
+ try{
+  await assert.rejects(access(path));
+  store=await openStore(path);
+  assert.equal(Number((await store.one('SELECT count(*) n FROM users')).n),2);
+  await store.transaction(()=>store.createUser('+96170000004','Fresh','Install','testing-123'));
+  await store.db.close();store=null;
+  store=await openStore(path);
+  assert.equal(Number((await store.one('SELECT count(*) n FROM users')).n),3);
+  assert.equal(Number((await store.one('SELECT count(*) n FROM wallet WHERE personal_user_id=(SELECT user_id FROM users WHERE phone=$1)',['+96170000004'])).n),1);
+ }finally{
+  if(store)await store.db.close();
+  await rm(root,{recursive:true,force:true});
+ }
+});

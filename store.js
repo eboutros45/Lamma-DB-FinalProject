@@ -1,6 +1,6 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { PGlite } from '@electric-sql/pglite';
-import { readFile } from 'node:fs/promises';
+import { readFile, mkdir } from 'node:fs/promises';
 import { randomBytes, scryptSync, timingSafeEqual, createHash } from 'node:crypto';
 export const hash = x => createHash('sha256').update(x).digest('hex');
 export function passwordHash(password) { const salt=randomBytes(16).toString('hex'); return `${salt}:${scryptSync(password,salt,32).toString('hex')}`; }
@@ -9,6 +9,7 @@ export class AppError extends Error { constructor(message,status=400){super(mess
 export function money(x){if(!/^\d+(\.\d{1,2})?$/.test(String(x)))throw new AppError('Enter an amount with up to two decimal places.');const n=Math.round(Number(x)*100);if(!Number.isSafeInteger(n)||n<=0||n>100000000)throw new AppError('Amount must be between $0.01 and $1,000,000.');return (n/100).toFixed(2);}
 export const text=(x,label,max=160)=>{if(typeof x!=='string'||!x.trim()||x.trim().length>max)throw new AppError(`Enter a valid ${label} (up to ${max} characters).`);return x.trim();};
 export async function openStore(path){
+ if(path && path !== 'memory://') await mkdir(path,{recursive:true});
  const db=new PGlite(path);await db.waitReady;
  const context=new AsyncLocalStorage();
  const q=async(sql,args=[]) => (await (context.getStore()||db).query(sql,args)).rows;
