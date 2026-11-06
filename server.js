@@ -31,6 +31,7 @@ export async function createApp({dataDir=process.env.DATA_DIR||'data/lamma'}={})
     }
     const token=(req.headers.cookie||'').match(/(?:^|;\s*)lamma_session=([a-f0-9]{64})(?:;|$)/)?.[1];const session=token?await one('SELECT user_id FROM sessions WHERE token_hash=$1 AND expires_at>now()',[hash(token)]):null;if(!session)throw new AppError('Please sign in.',401);
     const uid=session.user_id;
+    if(req.method==='GET'&&url.pathname==='/api/wallet'){send(200,await store.detail(uid,url.searchParams.get('id')));return;}
     if(req.method==='GET'&&url.pathname==='/api/state'){send(200,await store.state(uid));return;}
     if(req.method==='GET'&&url.pathname==='/api/bill'){
      const bill=await one('SELECT b.*,biz.display_name FROM bill b JOIN business biz USING(business_id) WHERE bill_code=$1',[(url.searchParams.get('code')||'').toUpperCase()]);if(!bill)throw new AppError('Bill not found.',404);bill.items=await q('SELECT * FROM bill_item WHERE bill_id=$1',[bill.bill_id]);send(200,bill);return;
@@ -43,7 +44,7 @@ export async function createApp({dataDir=process.env.DATA_DIR||'data/lamma'}={})
       const existing=await one('SELECT * FROM operation WHERE user_id=$1 AND key=$2',[uid,key]);if(existing){if(existing.fingerprint!==fingerprint)throw new AppError('This idempotency key was used for a different operation.',409);result=existing.response;return;}
       result=await store.action(uid,kind,body);
       await q('INSERT INTO operation VALUES($1,$2,$3,$4)',[uid,key,fingerprint,JSON.stringify(result)]);
-      await q('INSERT INTO audit_event(actor_id,action,details) VALUES($1,$2,$3)',[uid,kind,JSON.stringify({id:result.transaction_id||result.wallet_id||result.bill_id||result.request_id||result.expense_id||result.business_id})]);
+      await q('INSERT INTO audit_event(actor_id,action,details) VALUES($1,$2,$3)',[uid,kind,JSON.stringify({id:result.transaction_id||result.wallet_id||result.bill_id||result.request_id||result.expense_id||result.business_id||result.invitation_id})]);
      });send(200,result);return;
     }
     throw new AppError('Not found.',404);

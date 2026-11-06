@@ -1,7 +1,7 @@
 # Lamma
 
-A working backend-first prototype for personal wallets, shared finances, and bills.
-The lightweight responsive UI calls the API; data persists in embedded PostgreSQL
+A working backend-first application prototype for personal wallets, shared finances, and bills.
+The mobile-optimized responsive UI calls the API; data persists in embedded PostgreSQL
 using PGlite. All balances are **test funds**, denominated in USD with two decimal places.
 
 ## Run
@@ -33,13 +33,21 @@ private and out of Git. To use a fresh test database, set a new DATA_DIR.
 
 - Register/sign in/out; atomic personal-wallet provisioning and password hashing.
 - Personal transfers, available balances, and transaction history.
-- Shared wallets, registered member addition, contributions, and gift delivery.
-- Send, pay, or decline payment requests; seven-day expiry.
-- Record personal/shared expenses independently from money movement.
-- Create businesses with distinct wallets and issue itemized bills.
+- Shared wallets, consent-based invitations, contributions, gift delivery, owner payouts and archival.
+- Send, pay, decline, or cancel payment requests; seven-day expiry.
+- Record/categorize expenses; split equally, by custom amounts, or percentages and generate reimbursement requests.
+- Create businesses with distinct wallets, manage team permissions, and issue itemized bills.
 - Review bills by code; pay in full or start a temporary split wallet.
 - Collect contributions without overfunding; settle once to the business and archive.
 - Balanced, immutable ledger entries, persistent idempotency, and action audit records.
+
+## Update an existing installation
+
+Stop the server with Ctrl+C. If you cloned the repository, run `git pull`. If you
+downloaded a ZIP, replace the application files with the latest ZIP contents while
+preserving your existing `data` folder. Then run `npm ci` and `npm start`. Database
+migrations apply automatically and preserve existing accounts and history. Keep a
+backup of your stopped database directory before upgrading.
 
 ## Validate
 
@@ -48,14 +56,15 @@ npm test
 npx playwright test
 ```
 
-The browser test uses `/usr/bin/chromium`; adjust `playwright.config.js` for your
-machine. Tests use isolated in-memory PostgreSQL databases, not the running demo.
+The browser tests use system Chromium when available. On macOS or a machine
+without it, first run `npx playwright install chromium`. You can also set
+`CHROMIUM_PATH` to your browser executable. Tests use isolated in-memory PostgreSQL databases, not the running demo.
 See [validation](docs/validation.md) and [implementation scope](docs/implementation-scope.md).
 
 ## Design and requirements
 
-The initial migration preserves the supplied CDM/LDM translation. Migration 002
-adds the functional foundation. PGlite runs a PostgreSQL engine locally; moving
+The initial migration preserves the supplied CDM/LDM translation. Migrations 002 and 003
+add the financial and collaboration foundations. PGlite runs a PostgreSQL engine locally; moving
 the service to a hosted PostgreSQL server requires a database-driver adapter and
 multi-process concurrency validation. API requests are serialized in this local
 single-process version, with SQL transactions for atomic actions.

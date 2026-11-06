@@ -1,61 +1,86 @@
-# Initial functional version
+# Functional scope
 
-## Architecture
+## Current architecture
 
-Node HTTP API + a dependency-free browser UI + persistent PGlite PostgreSQL.
-`store.js` owns domain operations; `server.js` owns HTTP/session boundaries.
-The original schema is extended through migration 002. Only USD with two decimal
-places is enabled. Money is stored as exact PostgreSQL numeric values.
+Node HTTP API, a responsive browser UI, and persistent PGlite PostgreSQL.
+`store.js` owns financial primitives and initial flows; `workflows.js` adds
+collaboration workflows; `server.js` owns HTTP/session boundaries. Migrations
+001–003 run automatically at startup. Missing data directories are created.
+Only USD with two decimal places is enabled; PostgreSQL stores exact numeric values.
 
-Session tokens are random, hashed in storage, HttpOnly, and SameSite=Strict.
-Passwords use salted scrypt. Authentication attempts are rate limited in process.
-POST requests reject cross-origin browser requests. Financial action endpoints
-require an Idempotency-Key tied to actor and payload. Actions execute atomically,
-including their ledger postings, response records, and audit events. A deferred
-constraint verifies that journals balance; entries cannot be updated or deleted.
-Incoming and outgoing postings use signed amounts: increases in the wallet
-liability are positive; decreases negative. Null-wallet postings are the external
-test-funding contra account. A full chart of accounts remains future work.
+Tokens are random, hashed in storage, HttpOnly, and SameSite=Strict. Passwords use
+salted scrypt. Authentication attempts are rate limited in process. Cross-origin
+browser POST requests are rejected. Financial actions require an Idempotency-Key
+bound to actor and payload. Operations, ledger postings, audit events and replay
+responses commit together. A deferred constraint requires journals to balance;
+ledger entries cannot be updated or deleted.
 
-A process-wide request queue serializes local operations. Transfers additionally
-lock endpoints and debit only when sufficient funds exist. This is a local
-prototype concurrency model; use normal hosted PostgreSQL transaction/locking
-semantics and validate multiple workers before scaling.
+Wallet-liability increases use positive signed ledger amounts; decreases negative.
+Null-wallet entries represent the external test-funding contra account. A full
+chart of accounts remains future work. A process-wide queue serializes requests;
+SQL transactions and endpoint locks protect financial actions. Multi-worker hosted
+PostgreSQL deployment still requires a driver adapter and concurrency validation.
 
-## Initial workflow boundaries
+## Available workflows
 
-- Newly registered users start at zero; seeded accounts have clearly labeled test
-  funding. There is no real deposit or withdrawal integration.
-- Member addition currently adds a registered participant directly. Invitation
-  acceptance, unregistered invitations, contacts and discoverability remain pending.
-- Shared-wallet contributions are supported. Outgoing flows implemented now are
-  gift delivery and automatic consolidated bill settlement. General shared-wallet
-  payouts, explicit owner approval policies, and manual archival remain pending.
-- Split bills support custom contributions capped at the remaining bill total.
-  Equal/item/percentage allocation, individual share obligations, reservations,
-  allocation edits, deadlines, cancellations, and refunds remain pending.
-- Expenses are obligation records; they do not debit wallets or automatically
-  generate requests. Expense allocations and full settlement UI remain pending.
-- Businesses have owner access and a membership table. Delegated permission
-  management, approval/KYB, POS imports, taxes/adjustments and refunds remain pending.
-- Payment requests support one full payment or decline. There is no separate
-  acceptance stage, cancellation UI, partial payments or QR workflow yet.
-- Categories and item-selection entities from the original schema exist, but their
-  management and categorization workflows remain pending.
-- Transaction history exposes authorized wallet movements. Bill codes are
-  shareable payment references and reveal bill items to authenticated holders;
-  codes should only be shared with intended payers.
+- Registration, sign-in/out, automatic personal-wallet provisioning, transfers,
+  balances and authorized wallet transaction history.
+- General/gift shared wallets, contributions, wallet detail and member activity.
+- Phone-addressed invitations: registered and unregistered recipients, seven-day
+  expiration, accept/decline, owner cancellation. Pending invitations grant no
+  membership or financial access. Existing seed members stay joined.
+- Owner-controlled general shared-wallet payouts to registered personal wallets.
+  Gift delivery and automatic bill settlement use dedicated flows.
+- Owner archival at zero balance only after pending requests, unpaid expenses and
+  unpaid bills are resolved. Pending invitations are cancelled on archival.
+- Payment requests: full payment, decline, sender cancellation and expiry. Requests
+  generated by expenses are managed with their expense to keep obligations aligned.
+- Personal/shared expense recording with category, notes and valid date. Recording
+  alone does not move money.
+- Expense allocation by equal shares, custom USD amounts, or percentages. Shares
+  must reconcile exactly. Equal remainders follow participant order; percentage
+  remainders use largest fractional share, with participant order breaking ties.
+- The expense recorder is the person to reimburse. Their own share is treated as
+  covered; others receive requests payable to the recorder’s personal wallet.
+  This does not assert a historical payment transaction. Shared-expense participants
+  must already be wallet members. Personal splits require registered recipients.
+- Paid requests update expense status to partially settled or paid. A split is
+  created once; paid contributions cannot be removed through cancellation.
+- Expense cancellation cancels outstanding split requests if nobody else has paid.
+- Default and private custom expense categories; private categories cannot be used
+  by others. Shared expense viewers do not receive another user’s private category name.
+- Businesses, separate wallets, itemized bill creation, bill-code review, full bill
+  payments and temporary split wallets with capped custom contributions and one
+  consolidated settlement. Fully settled temporary wallets archive at zero balance.
+- Business owners can grant/update/revoke manager, cashier and viewer access.
+  Viewers cannot issue bills; managers/cashiers can. Only the primary owner manages
+  team access; primary ownership cannot be changed through these endpoints.
+- Activity search, request direction filters, active/archived wallet filters.
 
-## Before a real-funds environment
+## Mobile design
 
-Implement phone verification, account activation/recovery, scoped privacy and
-invitation consent, stronger permissions/step-up authentication, audit coverage
-(including sign-in/security events), a full ledger account model, reservations,
-compensating refunds/reversals, provider reconciliation and reliable event delivery.
-Finalize currency/rounding rules, lifecycle state machines and business approvals.
-Add hosted PostgreSQL support and multi-worker tests, operational monitoring,
-backup/restore testing, provider/POS integrations, and the applicable legal model.
-Public demo credentials and seeded balances belong only in the test environment.
+Phone layouts use a fixed bottom navigation bar with safe-area spacing; requests,
+expenses, bills, businesses, profile and categories remain reachable through More
+and notifications. Forms use bottom-sheet dialogs with independently scrollable
+bodies, persistent actions, 16px mobile inputs and touch-friendly controls. Icons
+are inline SVG. Desktop retains a full sidebar. Layouts are browser-tested at
+1440px, 390px and 320px; reduced-motion preferences are respected.
 
-This first slice makes the core flows reviewable. It does not implement every
-requirement in the supplied production guideline set.
+## Still pending
+
+Phone verification, registration activation/recovery, contact sync/discoverability,
+SMS invitation delivery, richer shared-member permission management and removal,
+expense split editing/reissue after decline/expiry, item-based bill allocations,
+reservations, QR requests, refunds/reversals, POS imports/taxes/adjustments,
+business approval/KYB, step-up authentication, full ledger account structure,
+provider reconciliation/event delivery, monitoring, backup/restore testing, hosted
+PostgreSQL/multi-worker support, and the applicable legal/operational model.
+
+A split expense represents reimbursement to its recorder; contributions to the
+shared wallet and item-based restaurant bill allocations are separate workflows.
+Business manager and cashier currently share bill-issuance permissions; richer
+role-specific operations remain to be defined.
+
+Public demo credentials and seeded balances are for local testing. Newly registered
+accounts start at zero. This version uses test funds and does not connect real
+funding or payout providers.

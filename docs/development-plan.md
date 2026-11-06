@@ -29,3 +29,10 @@ the backend; see [initial gap review](production-guidelines/schema-gap-review.md
 The first functional version now implements connected API/database/UI workflows.
 See [implementation scope](implementation-scope.md) for completed flows and gaps.
 Confirm and extend features through this lightweight UI before the final visual redesign.
+
+## Design and collaboration pass
+
+The interface now includes mobile bottom navigation, adaptive form sheets, wallet
+details and member activity. Invitations, expense splitting/reimbursement, shared
+owner payouts/archival, categories and business team access are available.
+Continue verifying these flows with test accounts before real provider integrations.

@@ -1,3 +1,4 @@
+import { collaboration } from './workflows.js';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { PGlite } from '@electric-sql/pglite';
 import { readFile, mkdir } from 'node:fs/promises';
@@ -16,7 +17,7 @@ export async function openStore(path){
  const transaction=fn=>db.transaction(tx=>context.run(tx,fn));
  const one=async(sql,args=[]) => (await q(sql,args))[0];
  await db.exec('CREATE TABLE IF NOT EXISTS schema_migration (name text PRIMARY KEY)');
- for(const name of ['001_initial_schema.sql','002_functional_foundation.sql']){
+ for(const name of ['001_initial_schema.sql','002_functional_foundation.sql','003_collaboration.sql']){
   if(!await one('SELECT name FROM schema_migration WHERE name=$1',[name])){
    await db.exec(await readFile(new URL(`./db/migrations/${name}`,import.meta.url),'utf8'));
    await q('INSERT INTO schema_migration VALUES ($1)',[name]);
@@ -53,16 +54,14 @@ export async function openStore(path){
   await q("UPDATE bill SET status='paid',transaction_id=$1,paid_at=now() WHERE bill_id=$2",[t.transaction_id,bill.bill_id]);
   await q("UPDATE wallet SET status='archived' WHERE wallet_id=$1",[w.wallet_id]);
  }
+ const workflows=collaboration({q,one,member,personal,transfer});
  async function action(uid,kind,b){
+  const extra=await workflows.action(uid,kind,b);if(extra!==undefined)return extra;
   const p=await personal(uid);
   if(kind==='transfer'){
    const dest=await one('SELECT w.* FROM wallet w JOIN users u ON u.user_id=w.personal_user_id WHERE u.phone=$1',[b.phone]);if(!dest)throw new AppError('No active recipient found for that number.');return transfer(p.wallet_id,dest.wallet_id,money(b.amount));
   }
-  if(kind==='shared'){const recipient=b.purpose==='gift'?await one('SELECT user_id FROM users WHERE phone=$1',[b.gift_phone]):null;return shared(uid,b.name,b.purpose||'general',b.target_amount,recipient?.user_id);}
-  if(kind==='member'){
-   const w=await member(uid,b.wallet_id,true);if(w.status!=='active')throw new AppError('This wallet is archived.');const u=await one('SELECT user_id FROM users WHERE phone=$1',[b.phone]);if(!u)throw new AppError('This person must register before joining in this version.');
-   await q("INSERT INTO shared_wallet_member(user_id,shared_wallet_id,member_role) VALUES($1,$2,'participant') ON CONFLICT DO NOTHING",[u.user_id,b.wallet_id]);return {message:'Member added.'};
-  }
+  if(kind==='shared'){if(b.purpose&&!['general','gift'].includes(b.purpose))throw new AppError('Temporary bill wallets are created through a bill.');const recipient=b.purpose==='gift'?await one('SELECT user_id FROM users WHERE phone=$1',[b.gift_phone]):null;return shared(uid,b.name,b.purpose||'general',b.target_amount,recipient?.user_id);}
   if(kind==='contribute'){
    const w=await member(uid,b.wallet_id);const amount=money(b.amount);const bill=await one("SELECT * FROM bill WHERE shared_wallet_id=$1 AND status <> 'paid'",[w.wallet_id]);
    if(bill&&Number(w.balance)+Number(amount)>Number(bill.total_amount))throw new AppError('This contribution exceeds the outstanding bill amount.');
@@ -83,10 +82,7 @@ export async function openStore(path){
    // Contributions to temporary bill wallets must also obey the funding cap and settlement workflow.
    const bill=await one('SELECT * FROM bill WHERE shared_wallet_id=$1',[r.destination_wallet_id]);
    if(bill){await member(uid,r.destination_wallet_id);const w=await one('SELECT balance FROM wallet WHERE wallet_id=$1',[r.destination_wallet_id]);if(Number(w.balance)+Number(r.amount)>Number(bill.total_amount))throw new AppError('Payment exceeds the outstanding bill amount.');}
-   const t=await transfer(p.wallet_id,r.destination_wallet_id,r.amount,'request_payment');await q("UPDATE payment_request SET status='paid',responded_at=now(),transaction_id=$1 WHERE request_id=$2",[t.transaction_id,r.request_id]);if(bill)await settleBill(bill);return t;
-  }
-  if(kind==='expense'){
-   if(b.wallet_id)await member(uid,b.wallet_id);return one('INSERT INTO expense(owner_user_id,shared_wallet_id,title,total_amount,split_method,expense_date,notes) VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING *',[uid,b.wallet_id||null,text(b.title,'title'),money(b.amount),'equal',b.expense_date||new Date().toISOString().slice(0,10),b.notes||null]);
+   const t=await transfer(p.wallet_id,r.destination_wallet_id,r.amount,'request_payment');await q("UPDATE payment_request SET status='paid',responded_at=now(),transaction_id=$1 WHERE request_id=$2",[t.transaction_id,r.request_id]);if(bill)await settleBill(bill);if(r.expense_id)await workflows.refreshExpense(r.expense_id);return t;
   }
   if(kind==='business'){
    const w=await one("INSERT INTO wallet(name,wallet_type,status) VALUES($1,'business','active') RETURNING *",[text(b.name,'business name')]);
@@ -120,10 +116,10 @@ export async function openStore(path){
   const ids=wallets.map(w=>w.wallet_id);
   const transactions=await q('SELECT t.*,s.name sender_name,r.name receiver_name FROM wallet_transaction t LEFT JOIN wallet s ON s.wallet_id=t.sender_wallet_id LEFT JOIN wallet r ON r.wallet_id=t.receiver_wallet_id WHERE sender_wallet_id=ANY($1::bigint[]) OR receiver_wallet_id=ANY($1::bigint[]) ORDER BY t.transaction_id DESC LIMIT 60',[ids]);
   const requests=await q(`SELECT p.*,u.first_name requester_name,v.first_name payer_name FROM payment_request p JOIN users u ON u.user_id=p.requester_id JOIN users v ON v.user_id=p.payer_id WHERE p.requester_id=$1 OR p.payer_id=$1 ORDER BY request_id DESC`,[uid]);
-  const expenses=await q('SELECT e.*,w.name wallet_name FROM expense e LEFT JOIN wallet w ON w.wallet_id=e.shared_wallet_id WHERE e.owner_user_id=$1 OR e.shared_wallet_id=ANY($2::bigint[]) ORDER BY expense_id DESC',[uid,ids]);
+  const expenses=await q('SELECT e.*,w.name wallet_name, CASE WHEN c.owner_user_id IS NULL OR c.owner_user_id=$1 THEN c.name END category_name FROM expense e LEFT JOIN wallet w ON w.wallet_id=e.shared_wallet_id LEFT JOIN category c ON c.category_id=e.category_id WHERE e.owner_user_id=$1 OR e.shared_wallet_id=ANY($2::bigint[]) OR EXISTS(SELECT 1 FROM expense_share es WHERE es.expense_id=e.expense_id AND es.user_id=$1) ORDER BY expense_id DESC',[uid,ids]);
   const businesses=await q('SELECT b.*,w.balance,a.role FROM business b JOIN business_access a USING(business_id) JOIN wallet w ON w.wallet_id=b.wallet_id WHERE a.user_id=$1',[uid]);
   const bills=await q(`SELECT b.*,biz.display_name FROM bill b JOIN business biz USING(business_id) WHERE b.shared_wallet_id=ANY($1::bigint[]) OR b.business_id IN (SELECT business_id FROM business_access WHERE user_id=$2) ORDER BY bill_id DESC`,[ids,uid]);
-  return {user,wallets,transactions,requests,expenses,businesses,bills};
+  return {user,wallets,transactions,requests,expenses,businesses,bills,...await workflows.extraState(uid,ids)};
  }
  if(!await one('SELECT user_id FROM users LIMIT 1')){
   await transaction(async()=>{
@@ -135,5 +131,5 @@ export async function openStore(path){
    const biz=await action(a.user_id,'business',{name:'Cedar & Salt'});await action(a.user_id,'bill',{business_id:biz.business_id,items:[{name:'Mezze to share',price:'24',quantity:1},{name:'Fresh lemonade',price:'6',quantity:2}]});
   });
  }
- return {db,transaction,q,one,personal,member,action,state,createUser,transfer};
+ return {db,transaction,q,one,personal,member,action,state,createUser,transfer,detail:workflows.detail};
 }

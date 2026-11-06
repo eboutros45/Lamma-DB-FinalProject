@@ -2,10 +2,10 @@
 
 ## Current functional version
 
-The original migration and migration 002 execute against the embedded PostgreSQL
+The original migration and migrations 002–003 execute against the embedded PostgreSQL
 engine in PGlite. The application seeds and persists a local demo database.
 
-`npm test` verifies 10 scenarios against an isolated PostgreSQL database:
+`npm test` verifies 20 scenarios against an isolated PostgreSQL database:
 
 1. Authentication and atomic personal-wallet provisioning.
 2. Balanced transfers, idempotent retries, and payload/key conflicts.
@@ -20,10 +20,21 @@ engine in PGlite. The application seeds and persists a local demo database.
 10. Immutable ledger entries, rejection of unbalanced journals, and reconciliation
     of all wallet balances against ledger postings.
 
-`npx playwright test` exercises demo sign-in, insufficient-funds feedback, shared
-wallet creation, member addition, contribution, personal expense recording, bill
-review and split initiation. It checks the desktop and 390px mobile layout for
-horizontal overflow and captures screenshots in ignored `test-results/`.
+Additional API tests verify consent-based and post-registration invitations,
+recipient-only responses, equal/custom/percentage split integrity and rounding,
+expense status updates, cancellation rules, owner-only payouts, archival blockers,
+category isolation, business role enforcement/revocation and final ledger reconciliation.
+The fresh-install test verifies creation of missing parent directories and data
+persistence across restart.
+
+`npx playwright test` exercises demo sign-in, insufficient-funds feedback, wallet
+creation, invitation acceptance in a separate browser session, member visibility,
+contribution, wallet details, categorized expense recording, split request creation,
+bill review/split initiation, mobile request payment and sign-out. It checks mobile
+navigation and absence of horizontal overflow at 390px and 320px. Screenshots of
+desktop/mobile dashboards, wallet details and mobile forms go to ignored
+`test-results/`. This is Chromium validation; physical-device Safari testing remains
+recommended before distribution to iOS users.
 
 ## Limits
 
